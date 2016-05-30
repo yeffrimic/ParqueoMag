@@ -31,9 +31,9 @@ String ISO8601;
 
 //-------- IBM Bluemix Info ---------//
 #define ORG "qnu3pg"
-#define DEVICE_TYPE "pruebayeffri"
-#define DEVICE_ID "ParqueoMag001"
-#define TOKEN "TvAAI?aFkL4982j2yy"
+#define DEVICE_TYPE "Parqueos"
+#define DEVICE_ID "ParqueoPiso"
+#define TOKEN "LfI7c0D9_rd!3ZIpdg"
 //-------- Customise the above values --------//
 
 char server[] = ORG ".messaging.internetofthings.ibmcloud.com";
@@ -43,7 +43,7 @@ char clientId[] = "d:" ORG ":" DEVICE_TYPE ":" DEVICE_ID;
 
 //-------- Topics to suscribe --------//
 const char publishTopic[] = "iot-2/evt/status/fmt/json";
-const char averageTopic[] = "iot-2/evt/average/fmt/json";
+const char conectionStatusTopic[] = "iot-2/evt/connection/fmt/json";
 const char responseTopic[] = "iotdm-1/response";
 const char manageTopic[] = "iotdevice-1/mgmt/manage";
 const char updateTopic[] = "iotdm-1/device/update";
@@ -67,29 +67,25 @@ PubSubClient client(server, 1883, callback, wifiClient);
 
 
 //-------- Ultrasonic sensor pins and variables --------//
-int iPinTrigger= 5;//D1
-int iPinEcho=  4;//D2
-boolean ultrasonic1=false;
+int iPinTrigger = 5; //D1
+int iPinEcho =  4; //D2
 
 //-------- Magnetic sensor variables --------//
 
 HMC5883L compass;
-int distance;
-int average;
-int compassdegrees;
-boolean magsensor1, a;
-String StateParking;
+
+String StateParking = "desocupado";
 int comparative;
 
 
 //-------- Global variables --------//
-int publishInterval = 30000; // 30 seconds
-long lastPublishMillis;
-long lastpub;
-long lastMsg = 0;
-int event = 0;
+boolean a, b, c, d = true;
+int event = 5;
 bool NTP;
+int loops=0;
 
+int publishIntervalAlive=1000*60*1; // 30 seconds
+long lastpubAlive,timenowAlive;
 //-------- HandleUpdate function receive the data, parse and update the info --------//
 void handleUpdate(byte* payload) {
   StaticJsonBuffer<1024> jsonBuffer;
@@ -150,7 +146,7 @@ void callback(char* topic, byte* payload, unsigned int payloadLength) {
 
 //-------- mqttConnect fuunction. Connect to mqtt Server  --------//
 void mqttConnect() {
-  if (!!!client.connected()) {
+ if (!!!client.connected()) {
     Serial.print(F("Reconnecting MQTT client to "));
     Serial.println(server);
     while (!!!client.connect(clientId, authMethod, token)) {
@@ -159,7 +155,9 @@ void mqttConnect() {
     }
     Serial.println();
   }
+ 
 }
+
 
 //-------- initManageDevice function. suscribe topics, Send metadata and supports to bluemix --------//
 void initManagedDevice() {
@@ -285,20 +283,38 @@ void udpConnect() {
 
 
 void ISO8601TimeStampDisplay() {
-  // digital clock display of the time
+  //Serial.println(ISO8601);
   ISO8601 = String (year(), DEC);
-  ISO8601 += "-";
+  if (month() < 10)
+  {
+    ISO8601 += "0";
+  }
   ISO8601 += month();
-  ISO8601 += "-";
+  if (day() < 10)
+  {
+    ISO8601 += "0";
+  }
   ISO8601 += day();
-  ISO8601 += "T";
+  ISO8601 += " ";
+  if (hour() < 10)
+  {
+    ISO8601 += "0";
+  }
   ISO8601 += hour();
   ISO8601 += ":";
+  if (minute() < 10)
+  {
+    ISO8601 += "0";
+  }
   ISO8601 += minute();
   ISO8601 += ":";
+  if (second() < 10)
+  {
+    ISO8601 += "0";
+  }
   ISO8601 += second();
-  ISO8601 += "-06:00";
-  //Serial.println(ISO8601);
+  //  ISO8601 += "-06:00";
+  Serial.println(ISO8601);
 }
 
 time_t prevDisplay = 0; // when the digital clock was displayed
@@ -320,10 +336,10 @@ void wifimanager() {
 
   WiFiManager wifiManager;
   Serial.println(F("empezando"));
-  if (!  wifiManager.autoConnect("flatwifi")) {
+  if (!  wifiManager.autoConnect("flatwifi1")) {
     Serial.println(F("error no conecto"));
 
-    if (!wifiManager.startConfigPortal("FlatWifi")) {
+    if (!wifiManager.startConfigPortal("FlatWifi1")) {
       Serial.println(F("failed to connect and hit timeout"));
 
       //reset and try again, or maybe put it to deep sleep
@@ -346,6 +362,8 @@ void publishData() {
   JsonObject& root = jsonbuffer.createObject();
   JsonObject& d = root.createNestedObject("d");
   JsonObject& data = d.createNestedObject("data");
+  
+  data["id"] = myName;
   data["state"] = StateParking;
   data["time"] = ISO8601;
   data["event"] = event;
@@ -355,12 +373,49 @@ void publishData() {
   Serial.print("Sending payload: ");
   Serial.println(payload);
   if (client.publish(publishTopic, payload, byte(sizeof(payload)))) {
-    Serial.println("Publish OK");
+   Serial.println(F("Publish OK"));
+  //  return true;
+  }
+  else {
+   Serial.println(F("Publish FAILED"));
+//    return false;
+  }
+}
+
+
+/* MQTTPublishStates()
+ * publish the the words that receive in json format
+ *
+ *
+ *
+ */
+
+void MQTTPublishStates(String data1, String text) {
+  while (!client.connected()) {
+    mqttConnect();
+  }
+  StaticJsonBuffer<1024> jsonbuffer;
+  JsonObject& root = jsonbuffer.createObject();
+  JsonObject& d = root.createNestedObject("d");
+  JsonObject& data = d.createNestedObject("data");
+  data["id"] = myName;
+  data[data1] = text;
+  char payload[200];
+  root.printTo(payload, sizeof(payload));
+
+  Serial.print(F("Sending payload: "));
+  Serial.println(payload);
+  if (client.publish(conectionStatusTopic, payload, byte(sizeof(payload)))) {
+    Serial.println(F("Publish OK"));
   }
   else {
     Serial.println("Publish FAILED");
   }
+  delay(1000);
+
 }
+
+
 
 /*-------- magsensor setup() --------//
 initialize the mag sensor HMC5883L
@@ -369,7 +424,7 @@ libraries used: wire.h
 
 //--------                   --------*/
 void magsensorsetup() {
-
+  int average;
   Wire.begin(D5, D4); //sda, scl
   // Initialize Initialize HMC5883L
   Serial.println("Initialize HMC5883L");
@@ -394,49 +449,19 @@ void magsensorsetup() {
   // Set calibration offset. See HMC5883L_calibration.ino
   compass.setOffset(0, 0);
   for (int x = 0; x < 30; x++) {
-    magsensor();
-    average += compassdegrees;
+
+    average +=  magsensor();
   }
   average /= 30;  //    checkTime ();
-  compassdegrees = 0;
   comparative = average ;
 
   while (!client.connected()) {
     mqttConnect();
   }
-
-  publishAverage();
-}
-
-
-/*Publish average()
- * publish the average of the magnetic sensor to mqtt server
- *
- *
- *
- */
-
-void publishAverage() {
-
-  StaticJsonBuffer<1024> jsonbuffer;
-  JsonObject& root = jsonbuffer.createObject();
-  JsonObject& d = root.createNestedObject("d");
-  JsonObject& data = d.createNestedObject("data");
-  data["average"] = average;
-  char payload[1024];
-  root.printTo(payload, sizeof(payload));
-
-  Serial.print("Sending payload: ");
-  Serial.println(payload);
-  if (client.publish(averageTopic, payload, byte(sizeof(payload)))) {
-    Serial.println("Publish OK");
-  }
-  else {
-    Serial.println("Publish FAILED");
-  }
-  delay(1000);
+  MQTTPublishStates("Average", String(average));
 
 }
+
 
 
 //-------- setup  --------//
@@ -445,8 +470,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
 
-  pinMode(iPinTrigger,OUTPUT);
-  pinMode(iPinEcho,INPUT);
+  pinMode(iPinTrigger, OUTPUT);
+  pinMode(iPinEcho, INPUT);
   while (WiFi.status() != WL_CONNECTED) {
     wifimanager();
     delay(1000);
@@ -458,63 +483,60 @@ void setup() {
   }
   mqttConnect();
   initManagedDevice();
-   magsensorsetup();
+  MQTTPublishStates("Connection", "online");
+  delay(15000);
+  magsensorsetup();
+  timenowAlive=millis();
 }
 
-void measureUltrasonic() {
 
-  if (!ultrasonic1) {
-    ultrasonicsensor();
-    if (distance < 70) {
-      ultrasonic1 = true;
+
+void loop() {
+  if (ultrasonicsensor() < 70) {
+    if (magsensor() < comparative - 2 || magsensor() > comparative + 2) {
+      b = true;
+    } else {
+      b = false;
     }
+    a = true;
+  } else {
+    a = false;
   }
-}
-
-void measureAndCompareMagneticSensor() {
-
-  if (ultrasonic1) {
-    magsensor();
-    if (compassdegrees < comparative - 10 || compassdegrees > comparative + 10) {
-      magsensor1 = true;
+  if ( a == b)    {
+    c = a;
+  }
+  if (d != c) {
+    if (c) {
       StateParking = "ocupado";
     } else {
-      ultrasonicsensor();
-      if (distance > 70) {
-        ultrasonic1 = false;
-        magsensor1 = false;
-        StateParking = "desocupado";
-        event++;
-      }
+      StateParking = "desocupado";
     }
-    if (magsensor1) {
-
+    //while (!
+    publishData();//) {
+      delay(1000);
+ //   }
+    if (!c) {
+      event++;
     }
+    d = c;
   }
-}
-
-
-void publishData2() {
-
-  if (a != magsensor1) {
-    publishData();
-    a = magsensor1;
-    lastpub = millis();
-  }
-
-}
-void loop() {
-  
-  measureUltrasonic();
-  measureAndCompareMagneticSensor();
-  publishData2();
-  
+  delay(1000);
   if (!client.loop()) {
     mqttConnect();
   }
+  timenowAlive=millis();
+  alive();
+}
+void alive() {
+  if (timenowAlive - lastpubAlive > publishIntervalAlive) {
+    MQTTPublishStates("online", String(loops));
+    lastpubAlive=millis();
+    loops++;
+  }
+
 }
 
-void ultrasonicsensor() {
+int ultrasonicsensor() {
 
   digitalWrite(iPinTrigger, LOW);
   digitalWrite(iPinTrigger, HIGH);
@@ -536,11 +558,13 @@ void ultrasonicsensor() {
 
   Serial.print(fDistance);
   Serial.println(F("cm"));
-  distance = int(fDistance);
   delay(100);
+  return fDistance;
 }
-void magsensor() {
 
+
+int magsensor() {
+  float compassdegrees;
   Vector norm = compass.readNormalize();
 
   // Calculate heading
@@ -575,6 +599,6 @@ void magsensor() {
   Serial.print(headingDegrees);
   Serial.println();
   compassdegrees = headingDegrees;
-
   delay(100);
+  return compassdegrees;
 }
